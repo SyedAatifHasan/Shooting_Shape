@@ -1,2 +1,2 @@
 # Shooting_Shape
-This code have HTML CSS JS with A Frames
+This code have use HTML CSS JS with A Frames to create the shooting games
