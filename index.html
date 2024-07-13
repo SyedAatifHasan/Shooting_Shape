@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>A-Frame Shooting Game</title>
+  <script src="https://aframe.io/releases/1.2.0/aframe.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/aframe-extras@6.1.0/dist/aframe-extras.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/aframe-physics-system@4.0.1/dist/aframe-physics-system.min.js"></script>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="menu">
+    <h1>Welcome to Shooting Game</h1>
+    <div>
+      <label for="playerName">Players Name:</label>
+      <input type="text" id="playerName" name="playerName" required>
+      <button onclick="askName()">Start</button>
+    </div>
+    <div class="options" id="levelSelect" style="display: none;">
+      <h2>Choose Your Level</h2>
+      <ul>
+        <li><a href="#" onclick="chooseLevel('easy')">Easy Level</a></li>
+        <li><a href="#" onclick="chooseLevel('medium')">Medium Level</a></li>
+        <li><a href="#" onclick="chooseLevel('hard')">Hard Level</a></li>
+      </ul>
+    </div>
+    <div class="options">
+      <h2>Help</h2>
+      <button id="helpButton">How to Play</button>
+    </div>
+  </div>
+  <div id="helpModal" class="modal">
+    <div class="modal-content">
+      <span class="close">&times;</span>
+      <h2>How to Play</h2>
+      <p>Welcome to the Shooting Game! Your goal is to shoot as many targets as possible:</p>
+      <ul class="help">
+        <li><strong>Objective:</strong> Shoot as many shapes (boxes, spheres, cylinders) as possible to earn points.</li>
+        <li><strong>Controls:</strong> Use the keyboard (<b>W, A, S, D</b>) to move the camera rig.</li>
+        <li><strong>Score:</strong> Earn points by clicking (<b>fusing with the cursor</b>) on shapes. Each successful hit increases the score.</li>
+        <li><strong>Game Over:</strong> The game ends when the maximum number of shapes is on screen. At this point, the game over screen appears, displaying the final score. Players can return to the home page to play again or navigate away.</li>
+        <li><strong>High Score:</strong> Achieving a high score changes the background and scoreboard color, indicating a new personal best.</li>
+      </ul>
+    </div>
+  </div>
+  <div id="navbar" style="display: none;">
+    <div>Score: <span id="score">0</span></div>
+    <div>High Score: <span id="highscore">0</span></div>
+    <button id="soundToggle" class="controlButton">Sound: On</button>
+    <button id="musicToggle" class="controlButton">Music: On</button>
+  </div>
+  <div id="gameOver" style="display: none;">
+    <h1>Game Over</h1>
+    <p id="scoreMessage"></p>
+    <button id="restartBtn" class="controlButton" onclick="goToHomePage()">Back to Home</button>
+  </div>
+  <div id="aframeContainer" style="display: none;">
+    <a-scene physics="debug: false">
+      <a-assets>
+        <a-mixin id="shape" geometry="primitive: box" material="color: red"></a-mixin>
+      </a-assets>
+
+      <a-sky id="sky" color="#ECECEC"></a-sky>
+
+      <a-entity id="cameraRig" position="0 1.6 0" movement-controls>
+        <a-entity id="camera" camera look-controls>
+          <a-entity cursor="fuse: true; fuseTimeout: 500" position="0 0 -1" geometry="primitive: ring; radiusInner: 0.02; radiusOuter: 0.03" material="color: black; shader: flat"></a-entity>
+        </a-entity>
+
+        <!-- Gun and pointer -->
+        <a-entity id="gun" position="0 -0.4 -1">
+          <a-entity geometry="primitive: box; width: 0.1; height: 0.2; depth: 0.5" material="color: black"></a-entity>
+          <a-entity geometry="primitive: box; width: 0.05; height: 0.1; depth: 0.3" material="color: grey" position="0 0.05 0.1"></a-entity>
+          <a-entity geometry="primitive: cylinder; radius: 0.01; height: 0.5" material="color: red" position="0 0 -0.25" rotation="90 0 0"></a-entity>
+        </a-entity>
+      </a-entity>
+
+      <a-entity id="shapes"></a-entity>
+
+      <!-- Score display in VR -->
+      <a-entity id="scoreText" text="value: Score: 0; color: black" position="-1 2 -3"></a-entity>
+      <a-entity id="highscoreText" text="value: High Score: 0; color: black" position="1 2 -3"></a-entity>
+    </a-scene>
+  </div>
+  <audio id="bgMusic" autoplay loop>
+    <source src="bgMusic.mp3" type="audio/mpeg">
+    Your browser does not support the audio element.
+  </audio>
+  <audio id="shootSound">
+    <source src="shoot_sound.mp3" type="audio/mpeg">
+    Your browser does not support the audio element.
+  </audio>
+  <script>
+    let playerName = '';
+    let level = 'easy';
+    let score = 0;
+    let highscore = localStorage.getItem('highscore') || 0;
+    const shapeTypes = ['box', 'sphere', 'cylinder'];
+    const colors = ['#EF2D5E', '#4CC3D9', '#FFC65D', '#7BC8A4', '#FF6347', '#8A2BE2'];
+    const shapesContainer = document.getElementById('shapes');
+    const shootSound = document.getElementById('shootSound');
+    const bgMusic = document.getElementById('bgMusic');
+  
+    document.getElementById('highscore').textContent = highscore;
+    document.getElementById('highscoreText').setAttribute('text', `value: High Score: ${highscore}; color: black`);
+  
+    let objectCreationInterval = 2000;
+    let maxObjects = 5;
+    let shapeInterval;
+  
+    window.addEventListener('keydown', function(event) {
+      const key = event.key.toLowerCase();
+      const camera = document.getElementById('cameraRig');
+  
+      switch (key) {
+        case 'w':
+          camera.object3D.position.z -= 0.1;
+          break;
+        case 's':
+          camera.object3D.position.z += 0.1;
+          break;
+        case 'a':
+          camera.object3D.position.x -= 0.1;
+          break;
+        case 'd':
+          camera.object3D.position.x += 0.1;
+          break;
+      }
+    });
+  
+    function createShape() {
+      const shapeType = shapeTypes[Math.floor(Math.random() * shapeTypes.length)];
+      const color = colors[Math.floor(Math.random() * colors.length)];
+      const position = {
+        x: Math.random() * 10 - 5,
+        y: Math.random() * 4 + 1,
+        z: Math.random() * -10 - 5,
+      };
+  
+      const shape = document.createElement('a-entity');
+      shape.setAttribute('geometry', `primitive: ${shapeType}`);
+      shape.setAttribute('material', `color: ${color}`);
+      shape.setAttribute('position', `${position.x} ${position.y} ${position.z}`);
+      shape.setAttribute('class', 'clickable');
+      shapesContainer.appendChild(shape);
+  
+      shape.addEventListener('click', () => {
+        if (soundEnabled) {
+          shootSound.play();
+        }
+        shape.parentNode.removeChild(shape);
+        updateScore();
+      });
+  
+      setTimeout(() => {
+        if (shape.parentNode) {
+          shape.parentNode.removeChild(shape);
+          checkGameOver();
+        }
+      }, 10000);
+    }
+  
+    function updateScore() {
+      score += 1;
+      document.getElementById('score').textContent = score;
+      document.getElementById('scoreText').setAttribute('text', `value: Score: ${score}; color: black`);
+  
+      if (score > highscore) {
+        highscore = score;
+        localStorage.setItem('highscore', highscore);
+        document.getElementById('highscore').textContent = highscore;
+        document.getElementById('highscoreText').setAttribute('text', `value: High Score: ${highscore}; color: black`);
+  
+        document.getElementById('sky').setAttribute('color', '#FDEBD0');
+        document.getElementById('navbar').style.backgroundColor = '#FDEBD0';
+      }
+    }
+  
+    function checkGameOver() {
+      const objectsOnScreen = document.querySelectorAll('#shapes > .clickable').length;
+      if (objectsOnScreen >= maxObjects) {
+        document.getElementById('scoreMessage').textContent = `${playerName}, your score is ${score}`;
+        document.getElementById('gameOver').style.display = 'block';
+        document.getElementById('navbar').style.display = 'none';
+        clearInterval(shapeInterval);
+        localStorage.setItem('highscore', highscore);
+      }
+    }
+  
+    function goToHomePage() {
+      window.location.reload();
+    }
+  
+    let soundEnabled = true;
+    const soundToggle = document.getElementById('soundToggle');
+    soundToggle.addEventListener('click', function() {
+      soundEnabled = !soundEnabled;
+      soundToggle.textContent = `Sound: ${soundEnabled ? 'On' : 'Off'}`;
+    });
+  
+    let musicEnabled = true;
+    const musicToggle = document.getElementById('musicToggle');
+    musicToggle.addEventListener('click', function() {
+      musicEnabled = !musicEnabled;
+      if (musicEnabled) {
+        bgMusic.play();
+        musicToggle.textContent = 'Music: On';
+      } else {
+        bgMusic.pause();
+        musicToggle.textContent = 'Music: Off';
+      }
+    });
+  
+    let bgMusicPlayed = false;
+    document.addEventListener('click', function() {
+      handleAutoplay();
+      document.removeEventListener('click', arguments.callee);
+    });
+  
+    function handleAutoplay() {
+      if (!bgMusicPlayed) {
+        bgMusic.play();
+        bgMusicPlayed = true;
+      }
+    }
+  
+    document.getElementById('helpButton').addEventListener('click', function() {
+      document.getElementById('helpModal').style.display = 'block';
+    });
+  
+    document.getElementsByClassName('close')[0].addEventListener('click', function() {
+      document.getElementById('helpModal').style.display = 'none';
+    });
+  
+    window.addEventListener('click', function(event) {
+      if (event.target == document.getElementById('helpModal')) {
+        document.getElementById('helpModal').style.display = 'none';
+      }
+    });
+  
+    function askName() {
+      playerName = document.getElementById('playerName').value.trim();
+      if (playerName === '') {
+        alert('Please enter your name.');
+        return;
+      }
+      document.getElementById('levelSelect').style.display = 'block';
+      document.querySelector('.menu div').style.display = 'none';
+      bgMusic.play(); // Start background music here
+    }
+  
+    function chooseLevel(selectedLevel) {
+      level = selectedLevel;
+      if (level === 'medium') {
+        objectCreationInterval = 1500;
+        maxObjects = 7;
+      } else if (level === 'hard') {
+        objectCreationInterval = 1000;
+        maxObjects = 10;
+      }
+      shapeInterval = setInterval(createShape, objectCreationInterval);
+      document.getElementById('aframeContainer').style.display = 'block';
+      document.getElementById('navbar').style.display = 'flex';
+    }
+  </script>
+  
+</body>
+</html>
